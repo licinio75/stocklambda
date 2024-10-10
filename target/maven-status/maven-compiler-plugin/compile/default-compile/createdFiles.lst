@@ -1,0 +1,4 @@
+com\demo\stocklambda\dto\PedidoSQSMessageDTO.class
+com\demo\stocklambda\App.class
+com\demo\stocklambda\StockCheckerLambda.class
+com\demo\stocklambda\dto\ItemPedidoDTO.class
