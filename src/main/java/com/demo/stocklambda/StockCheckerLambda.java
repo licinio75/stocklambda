@@ -11,7 +11,6 @@ import com.demo.stocklambda.dto.ItemPedidoDTO;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.*;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class StockCheckerLambda implements RequestHandler<SQSEvent, Void> {
