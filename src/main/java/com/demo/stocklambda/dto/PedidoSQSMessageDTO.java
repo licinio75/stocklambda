@@ -12,6 +12,7 @@ import java.util.List;
 @AllArgsConstructor
 public class PedidoSQSMessageDTO {
 
+    private String pedidoId;               // ID del pedido
     private String usuarioNombre;  // Nombre del usuario que realiza el pedido
     private String usuarioEmail;   // Email del usuario que realiza el pedido
     private List<ItemPedidoDTO> items;  // Lista de ítems pedidos

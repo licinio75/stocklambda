@@ -6,15 +6,13 @@ import com.amazonaws.services.lambda.runtime.events.SQSEvent;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 import com.demo.stocklambda.dto.PedidoSQSMessageDTO;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.demo.stocklambda.dto.ItemPedidoDTO;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
-import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
-import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
+import software.amazon.awssdk.services.dynamodb.model.*;
 
-
-import java.util.Map;
 import java.util.HashMap;
+import java.util.Map;
 
 public class StockCheckerLambda implements RequestHandler<SQSEvent, Void> {
 
@@ -31,28 +29,38 @@ public class StockCheckerLambda implements RequestHandler<SQSEvent, Void> {
             boolean stockSuficiente = verificarStock(pedido);
 
             if (stockSuficiente) {
-                enviarMensaje(pedido, invoiceQueueUrl);
+                System.out.println("Hay stock suficiente");
+                actualizarStock(pedido);  // Actualizar el stock en la base de datos
+                actualizarEstadoPedido(pedido, "COMPLETADO");  // Actualizar el estado a COMPLETADO
+                //enviarMensaje(pedido, invoiceQueueUrl);  // Enviar mensaje a la cola de pedidos confirmados
             } else {
-                enviarMensaje(pedido, cancelationQueueUrl);
+                System.out.println("No hay stock suficiente");
+                actualizarEstadoPedido(pedido, "CANCELADO");  // Actualizar el estado a CANCELADO
+                //enviarMensaje(pedido, cancelationQueueUrl);  // Enviar mensaje a la cola de pedidos cancelados
             }
         }
         return null;
     }
 
     private PedidoSQSMessageDTO parseMessage(String body) {
-        return null; // Implementa aquí el parseo del mensaje
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.readValue(body, PedidoSQSMessageDTO.class);
+        } catch (Exception e) {
+            System.err.println("Error al parsear el mensaje: " + e.getMessage());
+            return null;
+        }
     }
 
     private boolean verificarStock(PedidoSQSMessageDTO pedido) {
         for (ItemPedidoDTO item : pedido.getItems()) {
             Map<String, AttributeValue> key = Map.of(
-                "productoId", AttributeValue.builder().s(item.getProductoId()).build() // productoId es de tipo String
+                "id", AttributeValue.builder().s(item.getProductoId()).build()
             );
 
-            // Crear la solicitud para obtener el ítem en DynamoDB
             GetItemRequest request = GetItemRequest.builder()
-                    .tableName("Productos")   // Nombre de la tabla
-                    .key(key)                 // Usar la clave en el formato correcto
+                    .tableName("Productos")
+                    .key(key)
                     .build();
 
             GetItemResponse response = dynamoDbClient.getItem(request);
@@ -63,19 +71,54 @@ public class StockCheckerLambda implements RequestHandler<SQSEvent, Void> {
         return true;
     }
 
+    private void actualizarStock(PedidoSQSMessageDTO pedido) {
+        for (ItemPedidoDTO item : pedido.getItems()) {
+            Map<String, AttributeValue> key = Map.of(
+                "id", AttributeValue.builder().s(item.getProductoId()).build()
+            );
+
+            UpdateItemRequest updateRequest = UpdateItemRequest.builder()
+                .tableName("Productos")
+                .key(key)
+                .updateExpression("SET stock = stock - :cantidad")
+                .expressionAttributeValues(Map.of(":cantidad", AttributeValue.builder().n(String.valueOf(item.getCantidad())).build()))
+                .build();
+
+            dynamoDbClient.updateItem(updateRequest);
+        }
+    }
+
+    private void actualizarEstadoPedido(PedidoSQSMessageDTO pedido, String nuevoEstado) {
+        Map<String, AttributeValue> key = Map.of(
+            "id", AttributeValue.builder().s(pedido.getPedidoId()).build()
+        );
+
+        UpdateItemRequest updateRequest = UpdateItemRequest.builder()
+            .tableName("Pedidos")  // Nombre de la tabla de pedidos
+            .key(key)
+            .updateExpression("SET estado = :nuevoEstado")
+            .expressionAttributeValues(Map.of(":nuevoEstado", AttributeValue.builder().s(nuevoEstado).build()))
+            .build();
+
+        dynamoDbClient.updateItem(updateRequest);
+    }
+
     private void enviarMensaje(PedidoSQSMessageDTO pedido, String queueUrl) {
-
         String mensaje = convertPedidoToJson(pedido);
-
         SendMessageRequest sendMsgRequest = SendMessageRequest.builder()
                 .queueUrl(queueUrl)
                 .messageBody(mensaje)
                 .build();
-
         sqsClient.sendMessage(sendMsgRequest);
     }
 
     private String convertPedidoToJson(PedidoSQSMessageDTO pedido) {
-        return null; // Implementa aquí la conversión a JSON
+        ObjectMapper objectMapper = new ObjectMapper();
+        try {
+            return objectMapper.writeValueAsString(pedido);
+        } catch (Exception e) {
+            System.err.println("Error al convertir el pedido a JSON: " + e.getMessage());
+            return null;
+        }
     }
 }
