@@ -1,0 +1,44 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS SAM Template for StockCheckerLambda
+
+Resources:
+  StockCheckerLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: .
+      Description: 'Lambda function to check stock and update orders'
+      MemorySize: 512
+      Timeout: 15
+      Handler: com.demo.stocklambda.StockCheckerLambda::handleRequest
+      Runtime: java17
+      Architectures:
+        - x86_64
+      EphemeralStorage:
+        Size: 512
+      PackageType: Zip
+      Policies:
+        - AWSLambdaBasicExecutionRole  # Permisos básicos para escribir logs en CloudWatch
+        - Statement:
+            Effect: Allow
+            Action:
+              - sqs:ReceiveMessage
+              - sqs:DeleteMessage
+              - sqs:GetQueueAttributes
+            Resource: arn:aws:sqs:eu-north-1:241825613750:shopQueue  # Acceso a la cola existente
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+            Resource: arn:aws:dynamodb:eu-north-1:241825613750:table/Productos
+        - Statement:
+            Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:UpdateItem
+            Resource: arn:aws:dynamodb:eu-north-1:241825613750:table/Pedidos
+      SnapStart:
+        ApplyOn: None
+      RuntimeManagementConfig:
+        UpdateRuntimeOn: Auto

@@ -18,24 +18,36 @@ public class StockCheckerLambda implements RequestHandler<SQSEvent, Void> {
     private final DynamoDbClient dynamoDbClient = DynamoDbClient.builder().build();
     private final SqsClient sqsClient = SqsClient.builder().build();
 
-    private final String cancelationQueueUrl = System.getenv("CANCELATION_QUEUE_URL");
-    private final String invoiceQueueUrl = System.getenv("INVOICE_QUEUE_URL");
+    private final String cancelQueueUrl = System.getenv("CANCEL_QUEUE_URL");
+    private final String confirmQueueUrl = System.getenv("CONFIRM_QUEUE_URL");
 
     @Override
     public Void handleRequest(SQSEvent event, Context context) {
         for (SQSEvent.SQSMessage message : event.getRecords()) {
+            if (message.getBody() == null || message.getBody().isEmpty()) {
+                System.err.println("Mensaje vacío o null recibido. Saltando procesamiento.");
+                continue; // Salta este mensaje
+            } else {
+                System.err.println("Mensaje recibido: "+message.getBody());
+            }
+
             PedidoSQSMessageDTO pedido = parseMessage(message.getBody());
+            if (pedido == null || pedido.getItems() == null || pedido.getItems().isEmpty()) {
+                System.err.println("Error: El mensaje no contiene un pedido válido o los items están vacíos. Saltando procesamiento.");
+                continue; // Salta este mensaje
+            }
+
             boolean stockSuficiente = verificarStock(pedido);
 
             if (stockSuficiente) {
                 System.out.println("Hay stock suficiente");
                 actualizarStock(pedido);  // Actualizar el stock en la base de datos
                 actualizarEstadoPedido(pedido, "COMPLETADO");  // Actualizar el estado a COMPLETADO
-                //enviarMensaje(pedido, invoiceQueueUrl);  // Enviar mensaje a la cola de pedidos confirmados
+                enviarMensaje(pedido, confirmQueueUrl);  // Enviar mensaje a la cola de pedidos confirmados
             } else {
                 System.out.println("No hay stock suficiente");
                 actualizarEstadoPedido(pedido, "CANCELADO");  // Actualizar el estado a CANCELADO
-                //enviarMensaje(pedido, cancelationQueueUrl);  // Enviar mensaje a la cola de pedidos cancelados
+                enviarMensaje(pedido, cancelQueueUrl);  // Enviar mensaje a la cola de pedidos cancelados
             }
         }
         return null;
@@ -47,7 +59,7 @@ public class StockCheckerLambda implements RequestHandler<SQSEvent, Void> {
             return objectMapper.readValue(body, PedidoSQSMessageDTO.class);
         } catch (Exception e) {
             System.err.println("Error al parsear el mensaje: " + e.getMessage());
-            return null;
+            return null; // Devuelve null si falla el parseo
         }
     }
 
@@ -104,11 +116,13 @@ public class StockCheckerLambda implements RequestHandler<SQSEvent, Void> {
 
     private void enviarMensaje(PedidoSQSMessageDTO pedido, String queueUrl) {
         String mensaje = convertPedidoToJson(pedido);
-        SendMessageRequest sendMsgRequest = SendMessageRequest.builder()
-                .queueUrl(queueUrl)
-                .messageBody(mensaje)
-                .build();
-        sqsClient.sendMessage(sendMsgRequest);
+        if (mensaje != null) {
+            SendMessageRequest sendMsgRequest = SendMessageRequest.builder()
+                    .queueUrl(queueUrl)
+                    .messageBody(mensaje)
+                    .build();
+            sqsClient.sendMessage(sendMsgRequest);
+        }
     }
 
     private String convertPedidoToJson(PedidoSQSMessageDTO pedido) {
