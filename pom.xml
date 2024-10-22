@@ -58,6 +58,17 @@
 
     <build>
         <plugins>
+            <!-- Maven Compiler Plugin para compilar con Java 17 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version> <!-- Asegúrate de usar una versión reciente -->
+                <configuration>
+                    <source>17</source>  <!-- Fuente de Java 17 -->
+                    <target>17</target>  <!-- Target de Java 17 -->
+                </configuration>
+            </plugin>
+
             <!-- Maven Shade Plugin -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
